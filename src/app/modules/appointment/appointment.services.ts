@@ -150,29 +150,42 @@ const getAvailability = async (chamberLocationId: string, dateStr: string) => {
   const isToday = dateStr === todayStr;
   const currentMinutesFromMidnight = now.getHours() * 60 + now.getMinutes();
 
-  const slots: { time: string; isAvailable: boolean; isBreak?: boolean; breakReason?: string }[] = [];
+  const slots: {
+    time: string;
+    startTime: string;
+    endTime: string;
+    isAvailable: boolean;
+    isBooked: boolean;
+    isBreak: boolean;
+    breakTitle?: string | null;
+    isPast: boolean;
+  }[] = [];
 
   for (let m = startMin; m + duration <= endMin; m += duration) {
+    const timeStr = minutesToTime(m);
+    const endTimeStr = minutesToTime(m + duration);
+
     // Check if slot overlaps with any doctor break
     const activeBreak = breakIntervals.find((b) => m >= b.start && m < b.end);
-    if (activeBreak) {
-      continue; // Exclude break times completely from bookable slots
-    }
-
-    const timeStr = minutesToTime(m);
-
-    // If today, check if time has passed
     const isPast = isToday && m <= currentMinutesFromMidnight;
     const isBooked = bookedSlots.has(timeStr);
+    const isBreak = !!activeBreak;
 
     slots.push({
       time: timeStr,
-      isAvailable: !isPast && !isBooked,
+      startTime: timeStr,
+      endTime: endTimeStr,
+      isBooked,
+      isBreak,
+      breakTitle: activeBreak?.title || null,
+      isPast,
+      isAvailable: !isPast && !isBooked && !isBreak,
     });
   }
 
   return {
     isAvailable: slots.some((s) => s.isAvailable),
+    isClosed: false,
     bookingMode: "SLOT_BASED",
     chamber: {
       id: location.id,
@@ -183,6 +196,8 @@ const getAvailability = async (chamberLocationId: string, dateStr: string) => {
     date: dateStr,
     totalSlots: slots.length,
     availableSlotsCount: slots.filter((s) => s.isAvailable).length,
+    bookedSlotsCount: slots.filter((s) => s.isBooked).length,
+    breakSlotsCount: slots.filter((s) => s.isBreak).length,
     slots,
   };
 };
