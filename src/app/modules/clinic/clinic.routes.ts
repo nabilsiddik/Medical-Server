@@ -82,7 +82,17 @@ clinicRouter.post(
   checkAuth(UserRole.ADMIN),
   ClinicControllers.updateLocationSchedules,
 );
+clinicRouter.put(
+  "/locations/:id/schedules",
+  checkAuth(UserRole.ADMIN),
+  ClinicControllers.updateLocationSchedules,
+);
 clinicRouter.post(
+  "/chambers/:id/schedules",
+  checkAuth(UserRole.ADMIN),
+  ClinicControllers.updateLocationSchedules,
+);
+clinicRouter.put(
   "/chambers/:id/schedules",
   checkAuth(UserRole.ADMIN),
   ClinicControllers.updateLocationSchedules,

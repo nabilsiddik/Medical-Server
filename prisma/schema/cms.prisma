@@ -16,7 +16,31 @@ model BlogPost {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  comments        BlogComment[]
+
   @@map("blog_posts")
+}
+
+model BlogComment {
+  id         String        @id @default(uuid())
+  content    String        @db.Text
+  blogPostId String
+  blogPost   BlogPost      @relation(fields: [blogPostId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Facebook-style threaded replies
+  parentId   String?
+  parent     BlogComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    BlogComment[] @relation("CommentReplies")
+
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([blogPostId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("blog_comments")
 }
 
 model FAQ {

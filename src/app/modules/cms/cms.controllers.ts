@@ -3,6 +3,7 @@ import { catchAsync } from "../../errorHelpers/catchAsync.js";
 import { CmsServices } from "./cms.services.js";
 import { sendResponse } from "../../utils/userResponse.js";
 import { StatusCodes } from "http-status-codes";
+import { fileUploader } from "../../utils/fileUploader.js";
 
 // Blogs
 const getPublicBlogs = catchAsync(async (_req: Request, res: Response) => {
@@ -139,6 +140,72 @@ const getInquiries = catchAsync(async (_req: Request, res: Response) => {
   });
 });
 
+const uploadMediaFile = catchAsync(async (req: Request, res: Response) => {
+  const file = req.file;
+  if (!file) {
+    return sendResponse(res, {
+      statusCode: StatusCodes.BAD_REQUEST,
+      success: false,
+      message: "No image file provided for upload",
+      data: null,
+    });
+  }
+
+  const result = await fileUploader.uploadToCloudinary(file);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Image uploaded to Cloudinary successfully",
+    data: {
+      url: result.Location,
+      publicId: result.public_id,
+    },
+  });
+});
+
+// Blog Comments (Facebook-style threaded discussion)
+const getBlogComments = catchAsync(async (req: Request, res: Response) => {
+  const result = await CmsServices.getBlogComments(req.params.blogId as string);
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Comments retrieved successfully",
+    data: result,
+  });
+});
+
+const createBlogComment = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const result = await CmsServices.createBlogComment(
+    req.params.blogId as string,
+    user.id,
+    user.role,
+    req.body.content,
+    req.body.parentId,
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.CREATED,
+    success: true,
+    message: "Comment posted successfully",
+    data: result,
+  });
+});
+
+const deleteBlogComment = catchAsync(async (req: Request, res: Response) => {
+  const user = req.user!;
+  await CmsServices.deleteBlogComment(
+    req.params.commentId as string,
+    user.id,
+    user.role,
+  );
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Comment deleted successfully",
+    data: null,
+  });
+});
+
 export const CmsControllers = {
   getPublicBlogs,
   getAllBlogsAdmin,
@@ -153,4 +220,8 @@ export const CmsControllers = {
   getPublicGallery,
   submitInquiry,
   getInquiries,
+  uploadMediaFile,
+  getBlogComments,
+  createBlogComment,
+  deleteBlogComment,
 };

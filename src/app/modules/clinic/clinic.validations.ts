@@ -2,14 +2,18 @@ import { z } from "zod";
 
 export const updateClinicSettingsSchema = z.object({
   body: z.object({
+    clinicName: z.string().optional(),
+    brandName: z.string().optional(),
     doctorName: z.string().min(2).optional(),
     doctorTitle: z.string().optional(),
     specialty: z.string().optional(),
     degrees: z.string().optional(),
+    bmdcRegNumber: z.string().optional(),
     bmdcNumber: z.string().optional(),
     experienceYears: z.number().int().min(0).optional(),
     bio: z.string().optional(),
     aboutHtml: z.string().optional(),
+    contactPhone: z.string().optional(),
     phone: z.string().optional(),
     emergencyPhone: z.string().optional(),
     email: z.string().email().optional(),

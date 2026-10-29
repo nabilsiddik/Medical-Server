@@ -31,6 +31,7 @@ model User {
   doctorAppointments  Appointment[]  @relation("DoctorAppointments")
   issuedPrescriptions Prescription[] @relation("DoctorPrescriptions")
   performedAuditLogs  AuditLog[]
+  blogComments        BlogComment[]
 
   @@map("users")
 }

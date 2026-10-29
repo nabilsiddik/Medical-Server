@@ -32,7 +32,12 @@ export const getOrCreateClinicSettings = async () => {
     });
   }
 
-  return settings;
+  return {
+    ...settings,
+    clinicName: settings.brandName,
+    bmdcRegNumber: settings.bmdcNumber,
+    contactPhone: settings.phone,
+  };
 };
 
 // Public Cacheable Site Configuration
@@ -129,18 +134,45 @@ const getPublicSiteConfig = async () => {
   };
 };
 
-// Update full clinic settings & doctor profile
+// Update full clinic settings & doctor profile (supports aliases clinicName, bmdcRegNumber, contactPhone)
 const updateClinicSettings = async (data: any) => {
   const current = await getOrCreateClinicSettings();
-  return await prisma.clinicSetting.update({
+
+  const formattedData: any = { ...data };
+
+  // Map aliases cleanly to database schema columns
+  if (data.clinicName !== undefined) {
+    formattedData.brandName = data.clinicName;
+  }
+  delete formattedData.clinicName;
+
+  if (data.bmdcRegNumber !== undefined) {
+    formattedData.bmdcNumber = data.bmdcRegNumber;
+  }
+  delete formattedData.bmdcRegNumber;
+
+  if (data.contactPhone !== undefined) {
+    formattedData.phone = data.contactPhone;
+  }
+  delete formattedData.contactPhone;
+
+  const updated = await prisma.clinicSetting.update({
     where: { id: current.id },
-    data,
+    data: formattedData,
   });
+
+  return {
+    ...updated,
+    clinicName: updated.brandName,
+    bmdcRegNumber: updated.bmdcNumber,
+    contactPhone: updated.phone,
+  };
 };
 
 // Update only branding
 const updateBranding = async (data: {
   brandName?: string;
+  clinicName?: string;
   brandTagline?: string;
   primaryColor?: string;
   secondaryColor?: string;
@@ -148,10 +180,24 @@ const updateBranding = async (data: {
   faviconUrl?: string;
 }) => {
   const current = await getOrCreateClinicSettings();
-  return await prisma.clinicSetting.update({
+
+  const formattedData: any = { ...data };
+  if (data.clinicName !== undefined && data.brandName === undefined) {
+    formattedData.brandName = data.clinicName;
+  }
+  delete formattedData.clinicName;
+
+  const updated = await prisma.clinicSetting.update({
     where: { id: current.id },
-    data,
+    data: formattedData,
   });
+
+  return {
+    ...updated,
+    clinicName: updated.brandName,
+    bmdcRegNumber: updated.bmdcNumber,
+    contactPhone: updated.phone,
+  };
 };
 
 // Chamber locations CRUD
@@ -198,29 +244,39 @@ const updateLocationSchedules = async (
   chamberLocationId: string,
   schedules: any[],
 ) => {
-  // Replace location's schedules in a transaction
-  return await prisma.$transaction(async (tx) => {
-    await tx.schedule.deleteMany({ where: { chamberLocationId } });
-    if (schedules && schedules.length > 0) {
-      await tx.schedule.createMany({
-        data: schedules.map((s) => ({
-          chamberLocationId,
-          dayOfWeek: s.dayOfWeek,
-          startTime: s.startTime,
-          endTime: s.endTime,
-          slotDuration: s.slotDuration || null,
-          breakStartTime: s.breakStartTime || null,
-          breakEndTime: s.breakEndTime || null,
-          breaks: s.breaks ? s.breaks : null,
-          maxPatients: s.maxPatients || null,
-          isActive: s.isActive ?? true,
-        })),
-      });
-    }
-    return await tx.schedule.findMany({
-      where: { chamberLocationId },
-      orderBy: { dayOfWeek: "asc" },
+  // Verify location exists
+  const location = await prisma.chamberLocation.findUnique({
+    where: { id: chamberLocationId },
+  });
+  if (!location) {
+    throw new Error("Chamber location not found");
+  }
+
+  // 1. Delete previous schedules for this chamber (PgBouncer pooler friendly)
+  await prisma.schedule.deleteMany({ where: { chamberLocationId } });
+
+  // 2. Create new schedules
+  if (schedules && schedules.length > 0) {
+    await prisma.schedule.createMany({
+      data: schedules.map((s) => ({
+        chamberLocationId,
+        dayOfWeek: Number(s.dayOfWeek),
+        startTime: s.startTime,
+        endTime: s.endTime,
+        slotDuration: s.slotDuration ? Number(s.slotDuration) : null,
+        breakStartTime: s.breakStartTime || null,
+        breakEndTime: s.breakEndTime || null,
+        breaks: s.breaks ? s.breaks : null,
+        maxPatients: s.maxPatients ? Number(s.maxPatients) : null,
+        isActive: s.isActive ?? true,
+      })),
     });
+  }
+
+  // 3. Return updated schedules
+  return await prisma.schedule.findMany({
+    where: { chamberLocationId },
+    orderBy: { dayOfWeek: "asc" },
   });
 };
 
