@@ -1,0 +1,172 @@
+model ClinicSetting {
+  id                      String                 @id @default(uuid())
+  doctorName              String                 @default("Dr. Sarah Rahman")
+  doctorTitle             String                 @default("Senior Consultant Physician")
+  specialty               String                 @default("General Medicine & Clinical Specialist")
+  degrees                 String                 @default("MBBS, FCPS (Medicine)")
+  bmdcNumber              String                 @default("A-54321")
+  experienceYears         Int                    @default(12)
+  bio                     String?                @db.Text
+  aboutHtml               String?                @db.Text
+  phone                   String                 @default("+8801700000000")
+  emergencyPhone          String?
+  email                   String                 @default("doctor@chamber.com")
+  whatsappNumber          String?
+  address                 String?
+  languages               String[]               @default(["English", "Bangla"])
+  currency                String                 @default("BDT")
+  currencySymbol          String                 @default("৳")
+  timezone                String                 @default("Asia/Dhaka")
+  dateFormat              String                 @default("DD/MM/YYYY")
+  defaultLanguage         String                 @default("en")
+
+  // Doctor Profile Enhancements
+  certifications          String[]               @default([])
+  certificateDocuments    Json?                  // [{ title, url, issueDate }]
+  awards                  String[]               @default([])
+  consultationFee         Int                    @default(1000)
+  videoConsultationFee    Int                    @default(800)
+  doctorPhoto             String?
+  socialLinks             Json?                  // { facebook, twitter, linkedin, youtube, website }
+
+  // Single-Source Branding
+  brandName               String                 @default("Care Medical Chamber")
+  brandTagline            String?                @default("Compassionate, Specialized Healthcare")
+  primaryColor            String                 @default("#0284c7")
+  secondaryColor          String                 @default("#0f766e")
+  logoUrl                 String?
+  faviconUrl              String?
+
+  // Letterhead & Prescription Settings
+  letterheadHeader        String?                @db.Text
+  letterheadFooter        String?                @db.Text
+  signatureImageUrl       String?
+  sealImageUrl            String?
+
+  // Booking Engine Rules
+  defaultBookingMode      AppointmentBookingMode @default(SLOT_BASED)
+  defaultSlotDuration     Int                    @default(15) // minutes
+  bufferBetweenSlots      Int                    @default(5)  // minutes
+  advanceBookingDays      Int                    @default(30)
+  minLeadTimeHours        Int                    @default(2)
+  followUpDiscountDays    Int                    @default(14)
+  followUpDiscountPercent Int                    @default(50)
+  requirePrepayment       Boolean                @default(false)
+  depositAmount           Int                    @default(0)
+  noticeBoard             String?
+
+  // Google Sheet & AI Knowledge Base Connection
+  googleSheetId           String?
+  googleSheetUrl          String?
+  googleSheetConnected    Boolean                @default(false)
+  lastSheetSyncAt         DateTime?
+  knowledgeBaseData       Json?                  // Structured cached data from Google Sheet
+  aiChatEnabled           Boolean                @default(true)
+
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+
+  @@map("clinic_settings")
+}
+
+model ChamberLocation {
+  id               String                 @id @default(uuid())
+  name             String
+  address          String
+  city             String                 @default("Dhaka")
+  postalCode       String?
+  phone            String?
+  email            String?
+  roomNumber       String?
+  floor            String?
+  mapCoordinates   String?
+  mapEmbedUrl      String?                @db.Text
+  bookingMode      AppointmentBookingMode @default(SLOT_BASED)
+  dailySerialLimit Int                    @default(40)
+  slotDuration     Int                    @default(15)
+  isActive         Boolean                @default(true)
+  displayOrder     Int                    @default(1)
+
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  schedules          Schedule[]
+  scheduleExceptions ScheduleException[]
+  appointments       Appointment[]
+
+  @@map("chamber_locations")
+}
+
+model Schedule {
+  id                String          @id @default(uuid())
+  chamberLocationId String
+  dayOfWeek         Int             // 0=Sun, 1=Mon, ..., 6=Sat
+  startTime         String          // e.g. "17:00"
+  endTime           String          // e.g. "21:00"
+  slotDuration      Int?            // e.g. 15
+  breakStartTime    String?         // Legacy single break start
+  breakEndTime      String?         // Legacy single break end
+  breaks            Json?           // Multiple break slots: [{ startTime: "18:00", endTime: "18:30", title: "Evening Prayer" }]
+  maxPatients       Int?
+  isActive          Boolean         @default(true)
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  chamberLocation   ChamberLocation @relation(fields: [chamberLocationId], references: [id], onDelete: Cascade)
+
+  @@map("schedules")
+}
+
+model ScheduleException {
+  id                String           @id @default(uuid())
+  chamberLocationId String?
+  date              DateTime         @db.Date
+  isClosed          Boolean          @default(true)
+  reason            String?
+  startTime         String?
+  endTime           String?
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  chamberLocation   ChamberLocation? @relation(fields: [chamberLocationId], references: [id], onDelete: Cascade)
+
+  @@map("schedule_exceptions")
+}
+
+model CustomFieldDefinition {
+  id           String             @id @default(uuid())
+  target       CustomFieldTarget
+  name         String             @unique
+  label        String
+  type         CustomFieldType
+  options      String[]           @default([])
+  isRequired   Boolean            @default(false)
+  displayOrder Int                @default(1)
+  isActive     Boolean            @default(true)
+
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  values       CustomFieldValue[]
+
+  @@map("custom_field_definitions")
+}
+
+model CustomFieldValue {
+  id                 String                @id @default(uuid())
+  fieldDefinitionId  String
+  patientId          String?
+  visitNoteId        String?
+  value              String                @db.Text
+
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  fieldDefinition    CustomFieldDefinition @relation(fields: [fieldDefinitionId], references: [id], onDelete: Cascade)
+  patient            Patient?              @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visitNote          VisitNote?            @relation(fields: [visitNoteId], references: [id], onDelete: Cascade)
+
+  @@map("custom_field_values")
+}

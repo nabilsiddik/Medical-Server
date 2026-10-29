@@ -1,0 +1,36 @@
+model User {
+  id           String      @id @default(uuid())
+  fullName     String
+  email        String      @unique
+  profilePhoto String?
+  phoneNumber  String?     @unique
+  address      String?
+  gender       Gender?
+  role         UserRole    @default(PATIENT)
+
+  isEmailVerified     Boolean    @default(false)
+  isPhoneVerified     Boolean    @default(false)
+  status              UserStatus @default(ACTIVE)
+  twoFactorEnabled    Boolean    @default(false)
+  twoFactorSecret     String?
+  failedLoginAttempts Int        @default(0)
+  lockoutUntil        DateTime?
+
+  isDeleted   Boolean   @default(false)
+  lastLoginAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authAccounts AuthAccount[]
+  otps         OTP[]
+  sessions     Session[]
+  patient      Patient?
+
+  // Relations as staff/doctor
+  doctorAppointments  Appointment[]  @relation("DoctorAppointments")
+  issuedPrescriptions Prescription[] @relation("DoctorPrescriptions")
+  performedAuditLogs  AuditLog[]
+
+  @@map("users")
+}

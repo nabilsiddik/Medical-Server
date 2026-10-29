@@ -1,0 +1,149 @@
+model VisitNote {
+  id                     String             @id @default(uuid())
+  patientId              String
+  appointmentId          String?            @unique
+  doctorId               String?
+  chiefComplaint         String?            @db.Text
+  historyOfPresentIllness String?           @db.Text
+  subjective             String?            @db.Text
+  objective              String?            @db.Text
+  assessment             String?            @db.Text
+  plan                   String?            @db.Text
+  diagnosis              String[]           @default([])
+  aiSummary              String?            @db.Text
+  aiScribeDraft          String?            @db.Text
+  dentalChartData        Json?
+  isDraft                Boolean            @default(false)
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  patient                Patient            @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment            Appointment?       @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  prescriptions          Prescription[]
+  documents              Document[]
+  customFieldValues      CustomFieldValue[]
+
+  @@map("visit_notes")
+}
+
+model Drug {
+  id                 String             @id @default(uuid())
+  brandName          String
+  genericName        String
+  form               String             @default("Tablet") // Tablet, Capsule, Syrup, Injection, Drops, Ointment
+  strength           String?            // e.g. 500mg, 20mg/5ml
+  defaultDose        String?            // e.g. 1 tablet
+  defaultFrequency   String?            // e.g. 1+0+1
+  defaultDuration    String?            // e.g. 7 days
+  defaultInstruction String?            // e.g. After meal / খাবারের পর
+  manufacturer       String?
+  isActive           Boolean            @default(true)
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  prescriptionItems  PrescriptionItem[]
+
+  @@index([brandName])
+  @@index([genericName])
+  @@map("drugs")
+}
+
+model Prescription {
+  id                    String                @id @default(uuid())
+  prescriptionNumber    String                @unique // e.g. RX-2026-0001
+  patientId             String
+  doctorId              String
+  visitNoteId           String?
+  status                PrescriptionStatus    @default(FINALIZED)
+  chiefComplaints       String[]              @default([])
+  diagnoses             String[]              @default([])
+  investigationsAdvised String[]              @default([])
+  adviceBangla          String?               @db.Text
+  adviceEnglish         String?               @db.Text
+  nextFollowUpDate      DateTime?             @db.Date
+  verificationToken     String                @unique // For QR code authenticity check
+  pdfUrl                String?
+  version               Int                   @default(1)
+
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  patient               Patient               @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor                User                  @relation("DoctorPrescriptions", fields: [doctorId], references: [id], onDelete: Cascade)
+  visitNote             VisitNote?            @relation(fields: [visitNoteId], references: [id], onDelete: SetNull)
+
+  items                 PrescriptionItem[]
+  versions              PrescriptionVersion[]
+
+  @@index([prescriptionNumber])
+  @@index([patientId])
+  @@map("prescriptions")
+}
+
+model PrescriptionItem {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  drugId         String?
+  drugName       String
+  genericName    String?
+  form           String       @default("Tablet")
+  strength       String?
+  dose           String       // e.g. 1 tablet
+  frequency      String       // e.g. 1+0+1
+  duration       String       // e.g. 7 days
+  instruction    String       // e.g. After meal / খাবারের পরে
+  route          String       @default("Oral")
+  displayOrder   Int          @default(1)
+
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  drug           Drug?        @relation(fields: [drugId], references: [id], onDelete: SetNull)
+
+  @@map("prescription_items")
+}
+
+model PrescriptionTemplate {
+  id              String   @id @default(uuid())
+  title           String   // e.g. "Upper Respiratory Infection"
+  specialty       String?
+  chiefComplaints String[] @default([])
+  diagnoses       String[] @default([])
+  investigations  String[] @default([])
+  advice          String?  @db.Text
+  items           Json     // Array of drug presets
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("prescription_templates")
+}
+
+model PrescriptionVersion {
+  id              String       @id @default(uuid())
+  prescriptionId  String
+  version         Int
+  snapshot        Json
+  reasonForChange String?
+  createdAt       DateTime     @default(now())
+
+  prescription    Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@map("prescription_versions")
+}
+
+model MedicalCertificate {
+  id                String    @id @default(uuid())
+  certificateNumber String    @unique // e.g. CERT-2026-0001
+  patientId         String
+  type              String    // SICK_LEAVE, FITNESS, REFERRAL
+  title             String
+  content           String    @db.Text
+  startDate         DateTime? @db.Date
+  endDate           DateTime? @db.Date
+  verificationToken String    @unique
+  createdAt         DateTime  @default(now())
+
+  @@map("medical_certificates")
+}

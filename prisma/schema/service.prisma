@@ -1,0 +1,23 @@
+model Service {
+  id               String           @id @default(uuid())
+  name             String
+  slug             String           @unique
+  description      String?          @db.Text
+  whoIsItFor       String?          @db.Text
+  procedureSteps   String[]         @default([])
+  durationMinutes  Int              @default(15)
+  price            Int              @default(0) // Supports 0 for free booking
+  followUpPrice    Int              @default(0)
+  consultationType ConsultationType @default(IN_PERSON)
+  isActive         Boolean          @default(true)
+  isFeatured       Boolean          @default(true)
+  displayOrder     Int              @default(1)
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  appointments     Appointment[]
+  invoiceItems     InvoiceItem[]
+
+  @@map("services")
+}

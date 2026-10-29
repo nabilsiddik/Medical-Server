@@ -1,0 +1,44 @@
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String?
+  action    String   // VIEW, CREATE, UPDATE, DELETE, LOGIN, LOGOUT, EXPORT, STATUS_CHANGE
+  entity    String   // Patient, Prescription, Appointment, Payment, Setting, User
+  entityId  String?
+  details   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model BackgroundJob {
+  id          String    @id @default(uuid())
+  name        String    // REMINDER_SEND, FOLLOW_UP_CHECK, SYNC_KB, REPORT_GENERATE
+  payload     Json
+  status      JobStatus @default(PENDING)
+  scheduledAt DateTime
+  executedAt  DateTime?
+  attempts    Int       @default(0)
+  lastError   String?
+  createdAt   DateTime  @default(now())
+
+  @@index([status, scheduledAt])
+  @@map("background_jobs")
+}
+
+model BackupLog {
+  id            String   @id @default(uuid())
+  fileName      String
+  fileSizeBytes BigInt?
+  status        String   @default("SUCCESS")
+  location      String?
+  createdAt     DateTime @default(now())
+
+  @@map("backup_logs")
+}

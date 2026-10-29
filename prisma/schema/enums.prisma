@@ -1,0 +1,135 @@
+enum UserRole {
+  ADMIN
+  PATIENT
+}
+
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  DELETED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  OTHERS
+}
+
+enum OTPType {
+  EMAIL_VERIFICATION
+  FORGOT_PASSWORD
+  PHONE_LOGIN
+  BOOKING_VERIFICATION
+}
+
+enum AuthProvider {
+  CREDENTIAL
+  GOOGLE
+  FACEBOOK
+  GITHUB
+  PHONE_OTP
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  IN_CONSULTATION
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  RESCHEDULED
+}
+
+enum AppointmentBookingMode {
+  SLOT_BASED
+  SERIAL_TOKEN
+}
+
+enum ConsultationType {
+  IN_PERSON
+  VIDEO
+  FOLLOW_UP
+  HOME_VISIT
+}
+
+enum BookingSource {
+  WEBSITE
+  CHATBOT
+  WHATSAPP
+  PHONE
+  WALK_IN
+  ADMIN
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD_ON_SITE
+  BANK_TRANSFER
+  BKASH
+  NAGAD
+  ROCKET
+  SSLCOMMERZ
+  AAMARPAY
+  STRIPE
+  PAYPAL
+  ONLINE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum CustomFieldTarget {
+  PATIENT
+  VISIT_NOTE
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  CHECKBOX
+  FILE
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PrescriptionStatus {
+  DRAFT
+  FINALIZED
+  CANCELLED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  BOOKED
+  LOST
+}

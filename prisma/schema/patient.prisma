@@ -1,0 +1,115 @@
+model Patient {
+  id                    String            @id @default(uuid())
+  patientId             String            @unique // e.g. PAT-2026-0001
+  userId                String?           @unique
+  fullName              String
+  phone                 String
+  email                 String?
+  dateOfBirth           DateTime?         @db.Date
+  age                   Int?
+  gender                Gender?
+  bloodGroup            String?
+  address               String?
+  guardianName          String?
+  guardianPhone         String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  allergies             String[]          @default([])
+  chronicConditions     String[]          @default([])
+  currentMedications    String[]          @default([])
+  familyHistory         String?           @db.Text
+  notes                 String?           @db.Text
+  tags                  String[]          @default([])
+  isDeleted             Boolean           @default(false)
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  user                  User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appointments          Appointment[]
+  vitals                Vital[]
+  visitNotes            VisitNote[]
+  prescriptions         Prescription[]
+  invoices              Invoice[]
+  documents             Document[]
+  consents              ConsentRecord[]
+  customFieldValues     CustomFieldValue[]
+  conversations         Conversation[]
+
+  // Family relations
+  relationsFrom         PatientRelation[] @relation("PatientPrimary")
+  relationsTo           PatientRelation[] @relation("PatientRelated")
+
+  @@index([phone])
+  @@index([patientId])
+  @@map("patients")
+}
+
+model PatientRelation {
+  id               String   @id @default(uuid())
+  patientId        String
+  relatedPatientId String
+  relationship     String   // e.g., "Parent", "Child", "Spouse"
+  createdAt        DateTime @default(now())
+
+  patient          Patient  @relation("PatientPrimary", fields: [patientId], references: [id], onDelete: Cascade)
+  relatedPatient   Patient  @relation("PatientRelated", fields: [relatedPatientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, relatedPatientId])
+  @@map("patient_relations")
+}
+
+model Vital {
+  id            String       @id @default(uuid())
+  patientId     String
+  appointmentId String?
+  recordedAt    DateTime     @default(now())
+  bpSystolic    Int?
+  bpDiastolic   Int?
+  pulse         Int?
+  temperature   Float?
+  weight        Float?
+  height        Float?
+  bmi           Float?
+  bloodSugar    Float?
+  spO2          Int?
+  notes         String?
+
+  patient       Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@index([patientId, recordedAt])
+  @@map("vitals")
+}
+
+model Document {
+  id               String     @id @default(uuid())
+  patientId        String
+  visitNoteId      String?
+  title            String
+  category         String     @default("GENERAL") // LAB_REPORT, XRAY, PRESCRIPTION, DISCHARGE
+  fileUrl          String
+  fileSize         Int?
+  mimeType         String?
+  isPatientVisible Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+
+  patient          Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  visitNote        VisitNote? @relation(fields: [visitNoteId], references: [id], onDelete: SetNull)
+
+  @@map("documents")
+}
+
+model ConsentRecord {
+  id        String   @id @default(uuid())
+  patientId String
+  type      String   // GENERAL, TELEMEDICINE, PRIVACY, AI_PROCESSING
+  version   String   @default("1.0")
+  agreed    Boolean  @default(true)
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@map("consent_records")
+}

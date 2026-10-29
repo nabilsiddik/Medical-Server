@@ -1,0 +1,74 @@
+model BlogPost {
+  id              String   @id @default(uuid())
+  title           String
+  slug            String   @unique
+  summary         String?  @db.Text
+  content         String   @db.Text
+  coverImage      String?
+  category        String   @default("Health Tips")
+  tags            String[] @default([])
+  authorName      String   @default("Dr.")
+  readTimeMinutes Int      @default(3)
+  isPublished     Boolean  @default(true)
+  publishedAt     DateTime @default(now())
+  seoTitle        String?
+  seoDescription  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("blog_posts")
+}
+
+model FAQ {
+  id           String   @id @default(uuid())
+  question     String
+  answer       String   @db.Text
+  category     String   @default("General")
+  displayOrder Int      @default(1)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+model Testimonial {
+  id           String   @id @default(uuid())
+  patientName  String
+  patientPhoto String?
+  serviceName  String?
+  reviewText   String   @db.Text
+  rating       Int      @default(5)
+  isApproved   Boolean  @default(true)
+  displayOrder Int      @default(1)
+  createdAt    DateTime @default(now())
+
+  @@map("testimonials")
+}
+
+model GalleryItem {
+  id             String   @id @default(uuid())
+  title          String
+  category       String   @default("CHAMBER") // CHAMBER, EQUIPMENT, AWARDS, BEFORE_AFTER
+  imageUrl       String
+  caption        String?
+  displayOrder   Int      @default(1)
+  isConsentGiven Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  @@map("gallery_items")
+}
+
+model Inquiry {
+  id         String   @id @default(uuid())
+  name       String
+  phone      String
+  email      String?
+  subject    String?
+  message    String   @db.Text
+  isResolved Boolean  @default(false)
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  @@map("inquiries")
+}
