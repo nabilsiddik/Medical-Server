@@ -299,16 +299,26 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
       });
     }
 
+    const cleanInputPhone = data.phone ? data.phone.replace(/[^0-9]/g, "") : "";
+    const last10Digits = cleanInputPhone && cleanInputPhone.length >= 10 ? cleanInputPhone.slice(-10) : cleanInputPhone;
+
     if (!user && data.phone) {
       user = await tx.user.findFirst({
-        where: { phoneNumber: data.phone, isDeleted: false },
+        where: {
+          OR: [
+            { phoneNumber: data.phone },
+            ...(cleanInputPhone ? [{ phoneNumber: cleanInputPhone }] : []),
+            ...(last10Digits ? [{ phoneNumber: { contains: last10Digits } }] : []),
+          ],
+          isDeleted: false,
+        },
         include: { patient: true },
       });
     }
 
     // If user does not exist, automatically create a patient account
     if (!user) {
-      const cleanPhone = data.phone.replace(/[^0-9]/g, "");
+      const cleanPhone = cleanInputPhone;
       const accountEmail = data.email
         ? data.email.toLowerCase().trim()
         : `${cleanPhone || Date.now()}@patient.carepractice.com`;
@@ -341,11 +351,12 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
     }
 
     // Find or create Patient record
-    let patient = await tx.patient.findFirst({
+    let patient = user.patient || await tx.patient.findFirst({
       where: {
         OR: [
           { userId: user.id },
           { phone: data.phone },
+          ...(last10Digits ? [{ phone: { contains: last10Digits } }] : []),
         ],
         isDeleted: false,
       },
@@ -727,16 +738,61 @@ const refundAppointment = async (
 
 // 7. Get logged-in patient's appointments
 const getMyAppointments = async (userId: string) => {
-  const patient = await prisma.patient.findFirst({
-    where: { userId, isDeleted: false },
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { patient: true },
   });
 
-  if (!patient) {
+  if (!user) {
+    return [];
+  }
+
+  // Find all patient records connected to this user:
+  // 1. By direct userId link
+  // 2. By matching email
+  // 3. By matching phone number (full or last 10 digits)
+  const cleanPhone = user.phoneNumber ? user.phoneNumber.replace(/[^0-9]/g, "") : "";
+  const last10Digits = cleanPhone && cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+  const matchingPatients = await prisma.patient.findMany({
+    where: {
+      isDeleted: false,
+      OR: [
+        { userId: user.id },
+        ...(user.email ? [{ email: { equals: user.email, mode: "insensitive" as const } }] : []),
+        ...(user.phoneNumber ? [{ phone: user.phoneNumber }] : []),
+        ...(last10Digits ? [{ phone: { contains: last10Digits } }] : []),
+      ],
+    },
+    select: { id: true, userId: true },
+  });
+
+  // Automatically link any matching unlinked patient records to this user
+  const unlinked = matchingPatients.filter((p) => !p.userId);
+  if (unlinked.length > 0) {
+    await prisma.patient
+      .updateMany({
+        where: { id: { in: unlinked.map((p) => p.id) } },
+        data: { userId: user.id },
+      })
+      .catch(() => {});
+  }
+
+  const patientIds = Array.from(
+    new Set([
+      ...(user.patient?.id ? [user.patient.id] : []),
+      ...matchingPatients.map((p) => p.id),
+    ])
+  );
+
+  if (patientIds.length === 0) {
     return [];
   }
 
   return await prisma.appointment.findMany({
-    where: { patientId: patient.id },
+    where: {
+      patientId: { in: patientIds },
+    },
     orderBy: { appointmentDate: "desc" },
     include: {
       chamberLocation: true,

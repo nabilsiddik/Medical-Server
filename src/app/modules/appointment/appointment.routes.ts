@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { AppointmentControllers } from "./appointment.controllers.js";
-import { checkAuth } from "../../middlewares/checkAuth.js";
+import { checkAuth, optionalAuth } from "../../middlewares/checkAuth.js";
 import { UserRole } from "../../../generated/prisma/enums.js";
 import validateRequest from "../../middlewares/validateRequest.js";
 import {
@@ -15,9 +15,10 @@ const appointmentRouter = Router();
 appointmentRouter.get("/availability", AppointmentControllers.getAvailability);
 appointmentRouter.get("/slots", AppointmentControllers.getAvailability);
 
-// Public / Patient: book an appointment
+// Public / Patient: book an appointment (supports logged in patient via optionalAuth)
 appointmentRouter.post(
   "/book",
+  optionalAuth,
   validateRequest(bookAppointmentSchema),
   AppointmentControllers.bookAppointment,
 );
