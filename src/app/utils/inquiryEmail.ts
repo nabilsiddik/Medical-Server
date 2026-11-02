@@ -171,3 +171,4 @@ export function generateInquiryAcknowledgementEmail(data: { name: string; subjec
     </div>
   `;
 }
+
