@@ -9,7 +9,7 @@ echo "==========================================="
 # If invoked with 'start' argument, start the server
 if [ "$1" = "start" ]; then
   echo "==> Starting production server..."
-  exec node dist/server.js
+  exec npm run start
 fi
 
 # Step 1: Install Dependencies
@@ -42,3 +42,4 @@ fi
 echo "==========================================="
 echo "   ✅ Render Build Completed Successfully   "
 echo "==========================================="
+
