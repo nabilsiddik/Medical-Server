@@ -22,6 +22,7 @@ export interface EnvConfig {
   EMAIL_PROVIDER: string;
   EMAIL_SENDER_EMAIL: string;
   EMAIL_SENDER_APP_PASS: string;
+  ADMIN_EMAIL: string;
   RESEND_API_KEY?: string | undefined;
 
   // SMS Config
@@ -122,6 +123,7 @@ const loadEnvVariables = (): EnvConfig => {
     EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || "nodemailer",
     EMAIL_SENDER_EMAIL: process.env.EMAIL_SENDER_EMAIL || "",
     EMAIL_SENDER_APP_PASS: process.env.EMAIL_SENDER_APP_PASS || "",
+    ADMIN_EMAIL: process.env.ADMIN_EMAIL || "nabilsiddik70@gmail.com",
     RESEND_API_KEY: process.env.RESEND_API_KEY || "",
 
     // SMS

@@ -1,6 +1,12 @@
 import { prisma } from "../../../lib/prisma.js";
 import AppError from "../../errorHelpers/appError.js";
 import { StatusCodes } from "http-status-codes";
+import emailSender from "../../utils/emailSender.js";
+import {
+  generatePatientInquiryEmail,
+  generateInquiryAcknowledgementEmail,
+} from "../../utils/inquiryEmail.js";
+import { envVars } from "../../config/env.config.js";
 
 // Blogs
 const getPublicBlogs = async () => {
@@ -77,7 +83,48 @@ const createGalleryItem = async (data: any) => {
 
 // Inquiries
 const submitInquiry = async (data: any) => {
-  return await prisma.inquiry.create({ data });
+  // 1. Create inquiry record in PostgreSQL
+  const inquiry = await prisma.inquiry.create({ data });
+
+  // 2. Dispatch email to Admin Doctor
+  const adminEmail = envVars.ADMIN_EMAIL || process.env.ADMIN_EMAIL || "nabilsiddik70@gmail.com";
+  try {
+    const adminHtml = generatePatientInquiryEmail({
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      subject: data.subject,
+      message: data.message,
+    });
+
+    await emailSender.sendEmail({
+      to: adminEmail,
+      subject: `New Patient Inquiry: ${data.subject || "General Consultation"} - ${data.name}`,
+      html: adminHtml,
+    });
+    console.log(`[Inquiry Email] Dispatched to admin: ${adminEmail}`);
+
+    // 3. Dispatch confirmation acknowledgement to patient if email provided
+    if (data.email) {
+      const patientHtml = generateInquiryAcknowledgementEmail({
+        name: data.name,
+        subject: data.subject,
+      });
+
+      await emailSender.sendEmail({
+        to: data.email,
+        subject: `Inquiry Received - Prof. Dr. Sarah Rahman Care Chamber`,
+        html: patientHtml,
+      }).catch((err) => {
+        console.warn("[Inquiry Patient Ack Email] Non-fatal error:", err?.message);
+      });
+    }
+  } catch (error) {
+    console.error("[Inquiry Email Error] Failed to send email notification:", error);
+    // Non-fatal: inquiry record is safely preserved in database
+  }
+
+  return inquiry;
 };
 
 const getInquiries = async () => {
