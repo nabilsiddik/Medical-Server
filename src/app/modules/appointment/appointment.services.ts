@@ -31,7 +31,7 @@ function timeToMinutes(timeStr: string): number {
 }
 
 // 1. Get Availability for Chamber & Date (with multiple break intervals)
-const getAvailability = async (chamberLocationId: string, dateStr: string) => {
+const getAvailability = async (chamberLocationId: string, dateStr: string, serviceId?: string) => {
   if (!chamberLocationId || !dateStr) {
     throw new AppError(StatusCodes.BAD_REQUEST, "Chamber ID and Date (YYYY-MM-DD) are required.");
   }
@@ -103,32 +103,56 @@ const getAvailability = async (chamberLocationId: string, dateStr: string) => {
     };
   }
 
-  // Handle SLOT_BASED mode
-  // Only active (non-cancelled) appointments occupy a slot!
-  // If an appointment was cancelled, its slot automatically becomes available again!
+  // Handle SLOT_BASED mode with Dynamic Time-Blocking (No Patient Overlap)
+  // 1. Resolve required duration from service or fallback to schedule duration
+  let requiredDuration = schedule.slotDuration || location.slotDuration || 15;
+  if (serviceId) {
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { durationMinutes: true, name: true },
+    });
+    if (service?.durationMinutes && service.durationMinutes > 0) {
+      requiredDuration = service.durationMinutes;
+    }
+  }
+
+  // 2. Fetch all active booked appointments on this date with their time intervals
   const bookedAppointments = await prisma.appointment.findMany({
     where: {
       chamberLocationId,
       appointmentDate: targetDate,
       status: { notIn: [AppointmentStatus.CANCELLED] },
     },
-    select: { startTime: true },
+    select: {
+      id: true,
+      startTime: true,
+      endTime: true,
+      service: {
+        select: { durationMinutes: true },
+      },
+    },
   });
 
-  const bookedSlots = new Set(bookedAppointments.map((a) => a.startTime).filter(Boolean));
+  const bookedIntervals: { start: number; end: number }[] = [];
+  for (const app of bookedAppointments) {
+    if (!app.startTime) continue;
+    const appStart = timeToMinutes(app.startTime);
+    let appEnd: number;
+    if (app.endTime) {
+      appEnd = timeToMinutes(app.endTime);
+    } else {
+      appEnd = appStart + (app.service?.durationMinutes || schedule.slotDuration || 15);
+    }
+    bookedIntervals.push({ start: appStart, end: appEnd });
+  }
 
-  const startMin = timeToMinutes(schedule.startTime);
-  const endMin = timeToMinutes(schedule.endTime);
-  const duration = schedule.slotDuration || location.slotDuration || 15;
-
-  // Collect all break intervals (supports multiple breaks under a day!)
-  const breakIntervals: { start: number; end: number; title?: string }[] = [];
-
+  // 3. Resolve all Doctor Break intervals
+  const breakIntervals: { start: number; end: number; title: string }[] = [];
   if (schedule.breakStartTime && schedule.breakEndTime) {
     breakIntervals.push({
       start: timeToMinutes(schedule.breakStartTime),
       end: timeToMinutes(schedule.breakEndTime),
-      title: "Break",
+      title: "Doctor Break",
     });
   }
 
@@ -138,11 +162,18 @@ const getAvailability = async (chamberLocationId: string, dateStr: string) => {
         breakIntervals.push({
           start: timeToMinutes(b.startTime),
           end: timeToMinutes(b.endTime),
-          title: b.title || "Break",
+          title: b.title || "Doctor Break",
         });
       }
     }
   }
+
+  const startMin = timeToMinutes(schedule.startTime);
+  const endMin = timeToMinutes(schedule.endTime);
+
+  // Granular step: step by base slot duration or service duration (ensures all valid start times are available)
+  const baseStep = schedule.slotDuration || location.slotDuration || 15;
+  const step = (requiredDuration < baseStep && requiredDuration > 0) ? requiredDuration : baseStep;
 
   // Check if today: past time slots should not be bookable
   const now = new Date();
@@ -154,6 +185,7 @@ const getAvailability = async (chamberLocationId: string, dateStr: string) => {
     time: string;
     startTime: string;
     endTime: string;
+    durationMinutes: number;
     isAvailable: boolean;
     isBooked: boolean;
     isBreak: boolean;
@@ -161,25 +193,37 @@ const getAvailability = async (chamberLocationId: string, dateStr: string) => {
     isPast: boolean;
   }[] = [];
 
-  for (let m = startMin; m + duration <= endMin; m += duration) {
-    const timeStr = minutesToTime(m);
-    const endTimeStr = minutesToTime(m + duration);
+  for (let m = startMin; m + requiredDuration <= endMin; m += step) {
+    const candidateStart = m;
+    const candidateEnd = m + requiredDuration;
+    const timeStr = minutesToTime(candidateStart);
+    const endTimeStr = minutesToTime(candidateEnd);
 
-    // Check if slot overlaps with any doctor break
-    const activeBreak = breakIntervals.find((b) => m >= b.start && m < b.end);
-    const isPast = isToday && m <= currentMinutesFromMidnight;
-    const isBooked = bookedSlots.has(timeStr);
+    // Overlap condition with breaks: candidateStart < break.end && candidateEnd > break.start
+    const activeBreak = breakIntervals.find(
+      (b) => candidateStart < b.end && candidateEnd > b.start,
+    );
+
+    // Overlap condition with booked appointments: candidateStart < app.end && candidateEnd > app.start
+    const hasBookingOverlap = bookedIntervals.some(
+      (b) => candidateStart < b.end && candidateEnd > b.start,
+    );
+
+    const isPast = isToday && candidateStart <= currentMinutesFromMidnight;
     const isBreak = !!activeBreak;
+    const isBooked = hasBookingOverlap;
+    const isAvailable = !isPast && !isBreak && !isBooked;
 
     slots.push({
       time: timeStr,
       startTime: timeStr,
       endTime: endTimeStr,
+      durationMinutes: requiredDuration,
       isBooked,
       isBreak,
       breakTitle: activeBreak?.title || null,
       isPast,
-      isAvailable: !isPast && !isBooked && !isBreak,
+      isAvailable,
     });
   }
 
@@ -216,7 +260,8 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
       throw new AppError(StatusCodes.NOT_FOUND, "Chamber location not found or inactive.");
     }
 
-    // 2. Verify break times & double-booking for SLOT_BASED
+    // 2. Dynamic Time-Blocking & Strict No-Overlap Validation for SLOT_BASED
+    let computedEndTimeStr: string | null = null;
     if (location.bookingMode === AppointmentBookingMode.SLOT_BASED && data.startTime) {
       const schedule = await tx.schedule.findFirst({
         where: {
@@ -230,12 +275,38 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
         throw new AppError(StatusCodes.BAD_REQUEST, "No consultation schedule for this chamber on selected date.");
       }
 
-      const slotMinutes = timeToMinutes(data.startTime);
-      const breakIntervals: { start: number; end: number }[] = [];
+      // Resolve service duration
+      let serviceDuration = schedule.slotDuration || location.slotDuration || 15;
+      if (data.serviceId) {
+        const service = await tx.service.findUnique({
+          where: { id: data.serviceId },
+          select: { durationMinutes: true },
+        });
+        if (service?.durationMinutes && service.durationMinutes > 0) {
+          serviceDuration = service.durationMinutes;
+        }
+      }
+
+      const candidateStart = timeToMinutes(data.startTime);
+      const candidateEnd = candidateStart + serviceDuration;
+      computedEndTimeStr = minutesToTime(candidateEnd);
+
+      // Check schedule closing boundary
+      const scheduleEnd = timeToMinutes(schedule.endTime);
+      if (candidateEnd > scheduleEnd) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Selected consultation requires ${serviceDuration} minutes, which exceeds doctor's closing time (${schedule.endTime}).`,
+        );
+      }
+
+      // Check break intervals overlap
+      const breakIntervals: { start: number; end: number; title: string }[] = [];
       if (schedule.breakStartTime && schedule.breakEndTime) {
         breakIntervals.push({
           start: timeToMinutes(schedule.breakStartTime),
           end: timeToMinutes(schedule.breakEndTime),
+          title: "Doctor Break",
         });
       }
       if (schedule.breaks && Array.isArray(schedule.breaks)) {
@@ -244,28 +315,55 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
             breakIntervals.push({
               start: timeToMinutes(b.startTime),
               end: timeToMinutes(b.endTime),
+              title: b.title || "Doctor Break",
             });
           }
         }
       }
 
-      if (breakIntervals.some((b) => slotMinutes >= b.start && slotMinutes < b.end)) {
-        throw new AppError(StatusCodes.BAD_REQUEST, "Selected slot falls inside Doctor's break time.");
+      const activeBreak = breakIntervals.find(
+        (b) => candidateStart < b.end && candidateEnd > b.start,
+      );
+      if (activeBreak) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          `Selected consultation window (${data.startTime} - ${computedEndTimeStr}) overlaps with doctor's break (${activeBreak.title}).`,
+        );
       }
 
-      const existing = await tx.appointment.findFirst({
+      // Check appointment overlap against all active bookings (NO OVERLAP)
+      const existingAppointments = await tx.appointment.findMany({
         where: {
           chamberLocationId: data.chamberLocationId,
           appointmentDate: targetDate,
-          startTime: data.startTime,
           status: { notIn: [AppointmentStatus.CANCELLED] },
+        },
+        select: {
+          id: true,
+          startTime: true,
+          endTime: true,
+          service: { select: { durationMinutes: true } },
         },
       });
 
-      if (existing) {
+      const overlappingApp = existingAppointments.find((app) => {
+        if (!app.startTime) return false;
+        const appStart = timeToMinutes(app.startTime);
+        let appEnd: number;
+        if (app.endTime) {
+          appEnd = timeToMinutes(app.endTime);
+        } else {
+          appEnd = appStart + (app.service?.durationMinutes || schedule.slotDuration || 15);
+        }
+
+        // Two intervals overlap if candidateStart < appEnd && candidateEnd > appStart
+        return candidateStart < appEnd && candidateEnd > appStart;
+      });
+
+      if (overlappingApp) {
         throw new AppError(
           StatusCodes.CONFLICT,
-          "This appointment slot has just been reserved by another patient. Please select another slot.",
+          `This appointment slot (${data.startTime} - ${computedEndTimeStr}) overlaps with an existing patient reservation. Please select another slot.`,
         );
       }
     }
@@ -428,6 +526,7 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
         bookingMode: location.bookingMode,
         appointmentDate: targetDate,
         startTime: data.startTime || null,
+        endTime: computedEndTimeStr || null,
         serialNumber: serialNumber || null,
         consultationType: data.consultationType || "IN_PERSON",
         status: AppointmentStatus.CONFIRMED,

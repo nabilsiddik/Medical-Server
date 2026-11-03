@@ -9,10 +9,12 @@ import AppError from "../../errorHelpers/appError.js";
 const getAvailability = catchAsync(async (req: Request, res: Response) => {
   const chamberLocationId = String(req.query.chamberLocationId || req.query.chamberId || "");
   const date = String(req.query.date || req.query.appointmentDate || "");
+  const serviceId = req.query.serviceId ? String(req.query.serviceId) : undefined;
 
   const result = await AppointmentServices.getAvailability(
     chamberLocationId,
     date,
+    serviceId,
   );
   sendResponse(res, {
     statusCode: StatusCodes.OK,
