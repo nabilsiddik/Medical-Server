@@ -13,6 +13,7 @@ import {
 import calculatePagination, { type IOptions } from "../../utils/paginations.js";
 import { getVideoProvider } from "../../providers/video/index.js";
 import { getSmsProvider } from "../../providers/sms/index.js";
+import { getEmailProvider } from "../../providers/email/index.js";
 import { envVars } from "../../config/env.config.js";
 
 // Helper to format minutes into HH:mm
@@ -368,18 +369,15 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
       }
     }
 
-    // 3. Serial token calculation for SERIAL_TOKEN
-    let serialNumber: number | undefined = undefined;
-    if (location.bookingMode === AppointmentBookingMode.SERIAL_TOKEN) {
-      const count = await tx.appointment.count({
-        where: {
-          chamberLocationId: data.chamberLocationId,
-          appointmentDate: targetDate,
-          status: { notIn: [AppointmentStatus.CANCELLED] },
-        },
-      });
-      serialNumber = count + 1;
-    }
+    // 3. Sequential serial / token calculation for the chamber on target date
+    const appointmentCount = await tx.appointment.count({
+      where: {
+        chamberLocationId: data.chamberLocationId,
+        appointmentDate: targetDate,
+        status: { notIn: [AppointmentStatus.CANCELLED] },
+      },
+    });
+    const serialNumber = appointmentCount + 1;
 
     // 4. Resolve User and Patient records
     let user = null;
@@ -555,11 +553,7 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
     });
 
     // Create Queue Token with sequential token numbering
-    const maxToken = await tx.queueToken.findFirst({
-      where: { chamberLocationId: data.chamberLocationId, date: targetDate },
-      orderBy: { tokenNumber: "desc" },
-    });
-    const queueNumber = serialNumber || (maxToken ? maxToken.tokenNumber + 1 : 1);
+    const queueNumber = serialNumber;
     await tx.queueToken.create({
       data: {
         appointmentId: appointment.id,
@@ -583,6 +577,58 @@ const bookAppointment = async (data: any, currentUserId?: string) => {
     const sms = getSmsProvider();
     const smsMsg = `Confirmed: Appointment with ${envVars.BRAND_NAME} on ${data.appointmentDate}${data.startTime ? ` at ${data.startTime}` : ` (Token #${serialNumber})`}. Ref: ${appointmentRef}. Chamber: ${location.name}.`;
     sms.sendSms(patient.phone, smsMsg).catch(() => {});
+
+    // Send async confirmation Email if patient provided email
+    const recipientEmail = patient.email || data.email;
+    if (recipientEmail) {
+      const emailProvider = getEmailProvider();
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <h2 style="color: #1673b8; margin-top: 0; font-size: 22px;">Appointment Confirmed!</h2>
+          <p style="font-size: 15px; color: #1e293b;">Dear <strong>${patient.fullName}</strong>,</p>
+          <p style="font-size: 14px; color: #475569;">Your consultation appointment has been officially confirmed in the doctor's schedule. Details are below:</p>
+          
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 14px;">
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Booking Reference:</td>
+              <td style="padding: 10px 0; font-weight: bold; font-family: monospace; color: #0f172a;">${appointmentRef}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Queue Serial Token:</td>
+              <td style="padding: 10px 0; font-weight: bold; color: #1673b8; font-size: 16px;">Token #${serialNumber}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Chamber Location:</td>
+              <td style="padding: 10px 0; font-weight: bold; color: #0f172a;">${location.name}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Date & Time:</td>
+              <td style="padding: 10px 0; font-weight: bold; color: #0f172a;">${data.appointmentDate}${data.startTime ? ` at ${data.startTime}` : ""}</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 10px 0; color: #64748b;">Consultation Fee:</td>
+              <td style="padding: 10px 0; font-weight: bold; color: #0f172a;">${fee === 0 ? "FREE (৳0)" : `৳${fee}`}</td>
+            </tr>
+          </table>
+
+          <div style="background: #f8fafc; border-left: 4px solid #1673b8; padding: 12px 16px; border-radius: 6px; margin: 20px 0;">
+            <strong style="font-size: 13px; color: #1e293b; display: block; margin-bottom: 4px;">Important Instructions:</strong>
+            <ul style="margin: 0; padding-left: 18px; font-size: 13px; color: #475569; line-height: 1.6;">
+              <li>Please arrive 10 minutes before your consultation slot.</li>
+              <li>Bring your previous medical reports and prescription history if any.</li>
+              <li>You can view or manage your appointments anytime from your patient dashboard.</li>
+            </ul>
+          </div>
+
+          <p style="font-size: 12px; color: #94a3b8; margin-top: 24px; border-top: 1px solid #f1f5f9; padding-top: 12px; margin-bottom: 0;">
+            ${envVars.BRAND_NAME} &bull; Automated Patient Notification System
+          </p>
+        </div>
+      `;
+      emailProvider.sendEmail(recipientEmail, `Appointment Confirmed - Token #${serialNumber} (Ref: ${appointmentRef})`, emailHtml).catch((e) => {
+        console.warn("Async appointment email sending failed:", e?.message);
+      });
+    }
 
     return appointment;
   }, {
