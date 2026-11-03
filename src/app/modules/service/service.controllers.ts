@@ -5,7 +5,10 @@ import { sendResponse } from "../../utils/userResponse.js";
 import { StatusCodes } from "http-status-codes";
 
 const getAllServices = catchAsync(async (req: Request, res: Response) => {
-  const includeInactive = req.query.includeInactive === "true";
+  const includeInactive =
+    req.query.includeInactive === "true" ||
+    req.query.includeInactive === "1" ||
+    req.query.status === "ALL";
   const result = await ServiceServices.getAllServices(includeInactive);
   sendResponse(res, {
     statusCode: StatusCodes.OK,
