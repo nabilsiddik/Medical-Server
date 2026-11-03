@@ -33,6 +33,12 @@ billingRouter.post(
   validateRequest(recordPaymentSchema),
   BillingControllers.recordPayment,
 );
+billingRouter.post(
+  "/invoices/:id/payments",
+  checkAuth(UserRole.ADMIN),
+  validateRequest(recordPaymentSchema),
+  BillingControllers.recordPayment,
+);
 
 // Doctor Admin / Patient: Download branded invoice PDF
 billingRouter.get(
