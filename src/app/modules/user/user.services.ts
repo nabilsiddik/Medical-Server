@@ -6,6 +6,7 @@ import { prisma } from "../../../lib/prisma.js";
 import calculatePagination, { type IOptions } from "../../utils/paginations.js";
 import type { UserWhereInput } from "../../../generated/prisma/models.js";
 import type { JWTPayload } from "../../interfaces/index.js";
+import { isDemoUser } from "../../utils/demoHelper.js";
 import {
   UserRole,
   UserStatus,
@@ -293,6 +294,7 @@ const getMyProfile = async (currentUser: JWTPayload) => {
     updatedAt: user.updatedAt,
     patient: user.patient,
     doctorProfile,
+    isDemo: isDemoUser(user.email),
   };
 };
 

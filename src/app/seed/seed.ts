@@ -339,6 +339,157 @@ export async function seedAdminDoctorOnStartup() {
       console.log(`✅ Seeded demo patient: ${demoUser.email} (password: Patient@123456)`);
     }
 
+    
+    // 6. Seed Demo Doctor (Read-Only account for prospective doctor live preview)
+    const demoDoctorEmail = "demo.doctor@chamber.com";
+    const demoDoctorPassword = "Demo@Doctor2026";
+    let demoDoctorUser = await prisma.user.findUnique({
+      where: { email: demoDoctorEmail },
+      include: { authAccounts: true },
+    });
+
+    const demoDoctorHashed = await bcrypt.hash(demoDoctorPassword, 10);
+
+    if (!demoDoctorUser) {
+      console.log(`👨‍⚕️ Seeding Demo Doctor Account (${demoDoctorEmail})...`);
+      demoDoctorUser = await prisma.user.create({
+        data: {
+          fullName: "Dr. Demo Doctor (Read-Only)",
+          email: demoDoctorEmail,
+          phoneNumber: "+8801900000001",
+          gender: Gender.MALE,
+          role: UserRole.ADMIN,
+          isEmailVerified: true,
+          isPhoneVerified: true,
+          status: UserStatus.ACTIVE,
+          authAccounts: {
+            create: {
+              provider: "CREDENTIAL",
+              providerAccountId: demoDoctorEmail,
+              password: demoDoctorHashed,
+            },
+          },
+        },
+        include: { authAccounts: true },
+      });
+      console.log(`✅ Demo Doctor created: ${demoDoctorEmail} (password: ${demoDoctorPassword})`);
+    } else {
+      const credentialAcc = demoDoctorUser.authAccounts.find((a) => a.provider === "CREDENTIAL");
+      if (credentialAcc) {
+        await prisma.authAccount.update({
+          where: { id: credentialAcc.id },
+          data: { password: demoDoctorHashed },
+        });
+      } else {
+        await prisma.authAccount.create({
+          data: {
+            userId: demoDoctorUser.id,
+            provider: "CREDENTIAL",
+            providerAccountId: demoDoctorEmail,
+            password: demoDoctorHashed,
+          },
+        });
+      }
+      await prisma.user.update({
+        where: { id: demoDoctorUser.id },
+        data: {
+          status: UserStatus.ACTIVE,
+          isEmailVerified: true,
+          role: UserRole.ADMIN,
+        },
+      });
+    }
+
+    // 7. Seed Demo Patient (Read-Only account for prospective patient live preview)
+    const demoPatientEmail = "demo.patient@chamber.com";
+    const demoPatientPassword = "Demo@Patient2026";
+    let demoPatientUser = await prisma.user.findUnique({
+      where: { email: demoPatientEmail },
+      include: { authAccounts: true, patient: true },
+    });
+
+    const demoPatientHashed = await bcrypt.hash(demoPatientPassword, 10);
+
+    if (!demoPatientUser) {
+      console.log(`👤 Seeding Demo Patient Account (${demoPatientEmail})...`);
+      demoPatientUser = await prisma.user.create({
+        data: {
+          fullName: "Demo Patient (Read-Only)",
+          email: demoPatientEmail,
+          phoneNumber: "+8801900000002",
+          gender: Gender.FEMALE,
+          role: UserRole.PATIENT,
+          isEmailVerified: true,
+          status: UserStatus.ACTIVE,
+          authAccounts: {
+            create: {
+              provider: "CREDENTIAL",
+              providerAccountId: demoPatientEmail,
+              password: demoPatientHashed,
+            },
+          },
+          patient: {
+            create: {
+              patientId: "PAT-DEMO-0001",
+              fullName: "Demo Patient (Read-Only)",
+              phone: "+8801900000002",
+              email: demoPatientEmail,
+              gender: Gender.FEMALE,
+              age: 28,
+              bloodGroup: "B+",
+              address: "Dhanmondi, Dhaka",
+              allergies: ["Dust"],
+              chronicConditions: ["None"],
+            },
+          },
+        },
+        include: { authAccounts: true, patient: true },
+      });
+      console.log(`✅ Demo Patient created: ${demoPatientEmail} (password: ${demoPatientPassword})`);
+    } else {
+      const credentialAcc = demoPatientUser.authAccounts.find((a) => a.provider === "CREDENTIAL");
+      if (credentialAcc) {
+        await prisma.authAccount.update({
+          where: { id: credentialAcc.id },
+          data: { password: demoPatientHashed },
+        });
+      } else {
+        await prisma.authAccount.create({
+          data: {
+            userId: demoPatientUser.id,
+            provider: "CREDENTIAL",
+            providerAccountId: demoPatientEmail,
+            password: demoPatientHashed,
+          },
+        });
+      }
+      if (!demoPatientUser.patient) {
+        await prisma.patient.create({
+          data: {
+            userId: demoPatientUser.id,
+            patientId: "PAT-DEMO-0001",
+            fullName: "Demo Patient (Read-Only)",
+            phone: "+8801900000002",
+            email: demoPatientEmail,
+            gender: Gender.FEMALE,
+            age: 28,
+            bloodGroup: "B+",
+            address: "Dhanmondi, Dhaka",
+            allergies: ["Dust"],
+            chronicConditions: ["None"],
+          },
+        });
+      }
+      await prisma.user.update({
+        where: { id: demoPatientUser.id },
+        data: {
+          status: UserStatus.ACTIVE,
+          isEmailVerified: true,
+          role: UserRole.PATIENT,
+        },
+      });
+    }
+
     console.log("✨ Seed initialization finished successfully.");
   } catch (error) {
     console.error("❌ Seed initialization error:", error);

@@ -25,6 +25,7 @@ import type {
   IVerifyOTPInput,
 } from "./auth.interfaces.js";
 import type { JWTPayload } from "../../interfaces/index.js";
+import { isDemoUser } from "../../utils/demoHelper.js";
 
 // User login
 const loginUser = async (payload: IUserLoginInput) => {
@@ -101,10 +102,13 @@ const loginUser = async (payload: IUserLoginInput) => {
     },
   });
 
+  const isDemo = isDemoUser(user.email);
+
   const jwtPayload: JWTPayload = {
     id: user.id,
     email: user.email,
     role: user.role,
+    isDemo,
   };
 
   const accessToken = generateJwtToken(
@@ -128,6 +132,7 @@ const loginUser = async (payload: IUserLoginInput) => {
       status: user.status,
       isEmailVerified: user.isEmailVerified,
       profilePhoto: user.profilePhoto,
+      isDemo,
     },
     accessToken,
     refreshToken,
@@ -168,10 +173,13 @@ const refreshToken = async (token: string) => {
     );
   }
 
+  const isDemo = isDemoUser(user.email);
+
   const jwtPayload: JWTPayload = {
     id: user.id,
     email: user.email,
     role: user.role,
+    isDemo,
   };
 
   const newAccessToken = generateJwtToken(

@@ -5,6 +5,7 @@ import AppError from "../errorHelpers/appError.js";
 import { StatusCodes } from "http-status-codes";
 import type { JWTPayload } from "../interfaces/index.js";
 import type { UserRole } from "../../generated/prisma/enums.js";
+import { isDemoUser } from "../utils/demoHelper.js";
 
 declare global {
   namespace Express {
@@ -52,6 +53,23 @@ export const checkAuth = (...roles: (UserRole | string)[]) => {
         );
       }
 
+      // Restrict demo accounts from any mutating actions
+      if (
+        isDemoUser(verifiedToken.email, verifiedToken.isDemo) &&
+        ["POST", "PUT", "PATCH", "DELETE"].includes(req.method)
+      ) {
+        const isAuthExempt =
+          req.originalUrl.includes("/auth/logout") ||
+          req.originalUrl.includes("/auth/refresh-token");
+
+        if (!isAuthExempt) {
+          throw new AppError(
+            StatusCodes.FORBIDDEN,
+            "Demo Mode: Modifying, creating, or deleting records is disabled for demo accounts. Please contact us to get full software access!",
+          );
+        }
+      }
+
       next();
     } catch (err: unknown) {
       next(err);
@@ -86,8 +104,28 @@ export const optionalAuth = async (
         ) as JWTPayload;
         if (verifiedToken?.id) {
           req.user = verifiedToken;
+
+          // Block demo user from mutating public actions (e.g. appointment booking)
+          if (
+            isDemoUser(verifiedToken.email, verifiedToken.isDemo) &&
+            ["POST", "PUT", "PATCH", "DELETE"].includes(req.method)
+          ) {
+            const isAuthExempt =
+              req.originalUrl.includes("/auth/logout") ||
+              req.originalUrl.includes("/auth/refresh-token");
+
+            if (!isAuthExempt) {
+              throw new AppError(
+                StatusCodes.FORBIDDEN,
+                "Demo Mode: Modifying, creating, or deleting records is disabled for demo accounts. Please contact us to get full software access!",
+              );
+            }
+          }
         }
-      } catch {
+      } catch (err: unknown) {
+        if (err instanceof AppError) {
+          throw err;
+        }
         // Token invalid, proceed as guest
       }
     }
@@ -97,4 +135,3 @@ export const optionalAuth = async (
     next(err);
   }
 };
-

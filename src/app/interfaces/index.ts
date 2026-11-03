@@ -4,5 +4,5 @@ export interface JWTPayload {
   id: string;
   email: string;
   role: UserRole;
+  isDemo?: boolean;
 }
-

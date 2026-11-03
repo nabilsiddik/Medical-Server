@@ -7,6 +7,8 @@ import { router } from "./app/routes/index.js";
 import { envVars } from "./app/config/env.config.js";
 import { notFound } from "./app/middlewares/notFound.js";
 import globalErrorHandler from "./app/middlewares/globalErrorHandler.js";
+import { isDemoUser } from "./app/utils/demoHelper.js";
+import { verifyToken } from "./app/utils/jwtToken.js";
 
 export const app = express();
 
@@ -34,7 +36,7 @@ app.use(globalLimiter);
 // 3. Stricter Rate Limiting for Auth Routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 30, // Limit each IP to 30 requests per window
+  max: 60, // Limit each IP to 60 requests per window
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -73,7 +75,41 @@ app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 app.use(cookieParser());
 
-// 6. Root & Health Check Endpoints
+// 6. Global Demo User Mutation Guard (Blocks all write/modify/delete attempts for demo accounts)
+app.use((req: Request, res: Response, next) => {
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+    const isAuthExempt =
+      req.originalUrl.includes("/auth/login") ||
+      req.originalUrl.includes("/auth/logout") ||
+      req.originalUrl.includes("/auth/refresh-token");
+
+    if (!isAuthExempt) {
+      let token: string | undefined = req.cookies?.accessToken;
+      if (!token && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        token = authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : authHeader;
+      }
+      if (token) {
+        try {
+          const verified = verifyToken(token, envVars.JWT.JWT_ACCESS_SECRET);
+          if (verified && isDemoUser(verified.email, verified.isDemo)) {
+            return res.status(403).json({
+              success: false,
+              statusCode: 403,
+              message:
+                "Demo Mode: Modifying, creating, or deleting records is disabled for demo accounts. Please contact us to get full software access!",
+            });
+          }
+        } catch {
+          // Token invalid, proceed to standard auth handlers
+        }
+      }
+    }
+  }
+  next();
+});
+
+// 7. Root & Health Check Endpoints
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
@@ -92,10 +128,9 @@ app.get("/health", (req: Request, res: Response) => {
   });
 });
 
-// 7. Application Routes
+// 8. Application Routes
 app.use("/api/v1", router);
 
-// 8. 404 & Global Error Handling
+// 9. 404 & Global Error Handling
 app.use(notFound);
 app.use(globalErrorHandler);
-
