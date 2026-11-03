@@ -191,6 +191,7 @@ const getDoctorAnalyticsOverview = async () => {
 
   const appointmentsByDate = Array.from(appointmentDateMap.entries()).map(([date, data]) => ({
     date,
+    count: data.total,
     ...data,
   }));
 

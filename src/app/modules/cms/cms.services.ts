@@ -28,11 +28,35 @@ const getBlogBySlug = async (slug: string) => {
   });
 };
 
+const getBlogCategories = async () => {
+  const blogs = await prisma.blogPost.findMany({
+    where: {
+      category: {
+        not: "",
+      },
+    },
+    select: {
+      category: true,
+    },
+    distinct: ["category"],
+    orderBy: {
+      category: "asc",
+    },
+  });
+  return blogs.map((b) => b.category.trim()).filter(Boolean);
+};
+
 const createBlogPost = async (data: any) => {
+  if (data?.category && typeof data.category === "string") {
+    data.category = data.category.trim();
+  }
   return await prisma.blogPost.create({ data });
 };
 
 const updateBlogPost = async (id: string, data: any) => {
+  if (data?.category && typeof data.category === "string") {
+    data.category = data.category.trim();
+  }
   return await prisma.blogPost.update({
     where: { id },
     data,
@@ -280,6 +304,7 @@ export const CmsServices = {
   getPublicBlogs,
   getAllBlogsAdmin,
   getBlogBySlug,
+  getBlogCategories,
   createBlogPost,
   updateBlogPost,
   deleteBlogPost,

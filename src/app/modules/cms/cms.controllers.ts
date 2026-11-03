@@ -36,6 +36,16 @@ const getBlogBySlug = catchAsync(async (req: Request, res: Response) => {
   });
 });
 
+const getBlogCategories = catchAsync(async (_req: Request, res: Response) => {
+  const result = await CmsServices.getBlogCategories();
+  sendResponse(res, {
+    statusCode: StatusCodes.OK,
+    success: true,
+    message: "Blog categories retrieved successfully",
+    data: result,
+  });
+});
+
 const createBlogPost = catchAsync(async (req: Request, res: Response) => {
   const result = await CmsServices.createBlogPost(req.body);
   sendResponse(res, {
@@ -210,6 +220,7 @@ export const CmsControllers = {
   getPublicBlogs,
   getAllBlogsAdmin,
   getBlogBySlug,
+  getBlogCategories,
   createBlogPost,
   updateBlogPost,
   deleteBlogPost,

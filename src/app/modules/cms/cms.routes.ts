@@ -16,6 +16,7 @@ cmsRouter.post(
 
 // Public website content
 cmsRouter.get("/blogs/admin/all", checkAuth(UserRole.ADMIN), CmsControllers.getAllBlogsAdmin);
+cmsRouter.get("/blogs/categories", CmsControllers.getBlogCategories);
 cmsRouter.get("/blogs", CmsControllers.getPublicBlogs);
 cmsRouter.get("/blogs/:slug", CmsControllers.getBlogBySlug);
 cmsRouter.get("/faqs", CmsControllers.getPublicFaqs);
