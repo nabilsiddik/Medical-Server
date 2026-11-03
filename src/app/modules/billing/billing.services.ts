@@ -4,6 +4,7 @@ import { StatusCodes } from "http-status-codes";
 import calculatePagination, { type IOptions } from "../../utils/paginations.js";
 import { generateInvoicePdf } from "../../utils/pdfGenerator.js";
 import { getOrCreateClinicSettings } from "../clinic/clinic.services.js";
+import { PaymentMethod } from "../../../generated/prisma/enums.js";
 
 // 1. Create Invoice
 const createInvoice = async (data: any) => {
@@ -76,16 +77,27 @@ const recordPayment = async (invoiceId: string, data: any, staffId?: string) => 
   const paymentCount = await prisma.payment.count();
   const receiptNumber = `REC-${currentYear}-${(paymentCount + 1).toString().padStart(4, "0")}`;
 
-  const newPaidAmount = invoice.paidAmount + data.amount;
+  const payAmount = Math.round(Number(data.amount));
+  const newPaidAmount = invoice.paidAmount + payAmount;
   const newDueAmount = Math.max(0, invoice.total - newPaidAmount);
   const newStatus = newDueAmount === 0 ? "PAID" : "PARTIAL";
+
+  let effectiveMethod: PaymentMethod = PaymentMethod.CASH;
+  const rawMethod = String(data.method || "CASH").toUpperCase();
+  if (rawMethod === "CARD" || rawMethod === "CARD_ON_SITE") {
+    effectiveMethod = PaymentMethod.CARD_ON_SITE;
+  } else if (rawMethod === "SSLCOMMERZ" || rawMethod === "ONLINE") {
+    effectiveMethod = PaymentMethod.SSLCOMMERZ;
+  } else if (rawMethod in PaymentMethod) {
+    effectiveMethod = (PaymentMethod as any)[rawMethod];
+  }
 
   return await prisma.$transaction(async (tx) => {
     const payment = await tx.payment.create({
       data: {
         invoiceId,
-        amount: data.amount,
-        method: data.method || "CASH",
+        amount: payAmount,
+        method: effectiveMethod,
         transactionId: data.transactionId || null,
         collectedById: staffId || null,
         notes: data.notes || null,

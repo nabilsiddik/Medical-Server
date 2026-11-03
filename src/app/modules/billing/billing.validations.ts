@@ -22,14 +22,18 @@ export const createInvoiceSchema = z.object({
 
 export const recordPaymentSchema = z.object({
   body: z.object({
-    amount: z.number().int().positive("Payment amount must be positive"),
+    amount: z.number().positive("Payment amount must be positive"),
     method: z.enum([
       "CASH",
+      "CARD",
       "CARD_ON_SITE",
       "BANK_TRANSFER",
       "BKASH",
       "NAGAD",
       "ROCKET",
+      "SSLCOMMERZ",
+      "ONLINE",
+      "AAMARPAY",
       "STRIPE",
       "PAYPAL",
     ]).default("CASH"),
