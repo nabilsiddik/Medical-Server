@@ -114,47 +114,52 @@ export async function generatePrescriptionPdf(data: PrescriptionPdfData): Promis
     // 3. Clinical Summary (Left column) & Medicines (Right column)
     const startY = 180;
 
-    // Left sidebar: Complaints & Diagnosis
+    // Left sidebar: Complaints & Diagnosis (constrained width to avoid overlapping divider)
     let leftY = startY;
     if (data.chiefComplaints && data.chiefComplaints.length > 0) {
-      doc.fontSize(10).fillColor(palette.secondary).text("Chief Complaints:", 40, leftY);
-      leftY += 15;
+      doc.fontSize(10).fillColor(palette.secondary).font("Helvetica-Bold").text("Chief Complaints:", 40, leftY, { width: 125 });
+      leftY = doc.y + 4;
+      doc.font("Helvetica");
       data.chiefComplaints.forEach((c) => {
-        doc.fontSize(8).fillColor("#334155").text(`• ${c}`, 45, leftY);
-        leftY += 12;
+        doc.fontSize(8).fillColor("#334155").text(`• ${c}`, 45, leftY, { width: 120, lineGap: 2 });
+        leftY = doc.y + 3;
       });
-      leftY += 8;
+      leftY += 6;
     }
 
     if (data.diagnoses && data.diagnoses.length > 0) {
-      doc.fontSize(10).fillColor(palette.secondary).text("Diagnosis:", 40, leftY);
-      leftY += 15;
+      doc.fontSize(10).fillColor(palette.secondary).font("Helvetica-Bold").text("Diagnosis:", 40, leftY, { width: 125 });
+      leftY = doc.y + 4;
+      doc.font("Helvetica");
       data.diagnoses.forEach((d) => {
-        doc.fontSize(8).fillColor("#334155").text(`• ${d}`, 45, leftY);
-        leftY += 12;
+        doc.fontSize(8).fillColor("#334155").text(`• ${d}`, 45, leftY, { width: 120, lineGap: 2 });
+        leftY = doc.y + 3;
       });
-      leftY += 8;
+      leftY += 6;
     }
 
     if (data.investigations && data.investigations.length > 0) {
-      doc.fontSize(10).fillColor(palette.secondary).text("Investigations:", 40, leftY);
-      leftY += 15;
+      doc.fontSize(10).fillColor(palette.secondary).font("Helvetica-Bold").text("Investigations:", 40, leftY, { width: 125 });
+      leftY = doc.y + 4;
+      doc.font("Helvetica");
       data.investigations.forEach((inv) => {
-        doc.fontSize(8).fillColor("#334155").text(`• ${inv}`, 45, leftY);
-        leftY += 12;
+        doc.fontSize(8).fillColor("#334155").text(`• ${inv}`, 45, leftY, { width: 120, lineGap: 2 });
+        leftY = doc.y + 3;
       });
     }
 
     // Divider line between columns
-    doc.moveTo(175, startY).lineTo(175, 680).strokeColor("#e2e8f0").stroke();
+    doc.moveTo(175, startY).lineTo(175, 700).strokeColor("#e2e8f0").stroke();
 
     // Right column: Rx Medications
     let rightY = startY;
     doc
-      .fontSize(18)
+      .fontSize(16)
       .fillColor(palette.primary)
-      .text("℞", 190, rightY - 5);
-    rightY += 24;
+      .font("Helvetica-Bold")
+      .text("Rx", 195, rightY - 4);
+    doc.font("Helvetica");
+    rightY += 22;
 
     data.items.forEach((item, idx) => {
       // Drug line: 1. Tab. Napa Extra (500mg)
@@ -163,12 +168,15 @@ export async function generatePrescriptionPdf(data: PrescriptionPdfData): Promis
       doc
         .fontSize(10)
         .fillColor("#0f172a")
+        .font("Helvetica-Bold")
         .text(
           `${idx + 1}.  ${formStr}${item.name}${strengthStr}`,
           195,
           rightY,
+          { width: 345 }
         );
-      rightY += 14;
+      doc.font("Helvetica");
+      rightY = doc.y + 3;
 
       // Dosage & instruction: 1+0+1  •  5 days  •  After meal (avoid duplicating when dose === frequency)
       const dosageParts: string[] = [];
@@ -177,51 +185,86 @@ export async function generatePrescriptionPdf(data: PrescriptionPdfData): Promis
       if (item.duration) dosageParts.push(item.duration);
       if (item.instruction) dosageParts.push(item.instruction);
 
-      doc
-        .fontSize(8)
-        .fillColor("#475569")
-        .text(
-          `     ${dosageParts.join("  •  ")}`,
-          195,
-          rightY,
-        );
-      rightY += 18;
+      if (dosageParts.length > 0) {
+        doc
+          .fontSize(8)
+          .fillColor("#475569")
+          .text(
+            dosageParts.join("  •  "),
+            210,
+            rightY,
+            { width: 330 }
+          );
+        rightY = doc.y + 8;
+      } else {
+        rightY += 6;
+      }
     });
 
     // Advice block
     if (data.adviceEnglish || data.adviceBangla) {
-      rightY = Math.max(rightY + 15, 520);
-      doc.fontSize(10).fillColor(palette.secondary).text("Advice & Instructions:", 195, rightY);
-      rightY += 14;
+      rightY = Math.max(rightY + 12, 530);
+      doc.fontSize(10).fillColor(palette.secondary).font("Helvetica-Bold").text("Advice & Instructions:", 195, rightY, { width: 345 });
+      rightY = doc.y + 4;
+      doc.font("Helvetica");
       if (data.adviceEnglish) {
-        doc.fontSize(8).fillColor("#334155").text(data.adviceEnglish, 205, rightY);
-        rightY += 14;
+        doc.fontSize(8).fillColor("#334155").text(data.adviceEnglish, 195, rightY, { width: 345, lineGap: 2 });
+        rightY = doc.y + 4;
       }
       if (data.adviceBangla) {
-        doc.fontSize(8).fillColor("#334155").text(data.adviceBangla, 205, rightY);
-        rightY += 14;
+        doc.fontSize(8).fillColor("#334155").text(data.adviceBangla, 195, rightY, { width: 345, lineGap: 2 });
+        rightY = doc.y + 4;
       }
     }
 
     if (data.nextFollowUpDate) {
-      rightY += 10;
+      rightY += 6;
       doc
         .fontSize(9)
         .fillColor(palette.primary)
-        .text(`Next Follow-up: ${data.nextFollowUpDate}`, 195, rightY);
+        .font("Helvetica-Bold")
+        .text(`Next Follow-up: ${data.nextFollowUpDate}`, 195, rightY, { width: 345 });
+      doc.font("Helvetica");
     }
 
-    // 4. Footer & Signature
-    doc.rect(40, 750, 515, 2).fill(palette.primary);
+    // 4. Footer & Digital Signature
+    doc.rect(40, 715, 515, 1).fill("#cbd5e1");
+
     doc
       .fontSize(8)
       .fillColor("#64748b")
       .text(
         `Generated electronically by ${data.clinic.name}. Authentic copy with QR verification.`,
         40,
-        760,
+        725,
+        { width: 280 }
       );
-    doc.text(`Doctor's Signature: _________________________`, 340, 760);
+    doc
+      .fontSize(7)
+      .fillColor("#94a3b8")
+      .text(
+        `Prescription Ref: ${data.prescriptionNumber} • Date: ${data.date}`,
+        40,
+        740,
+        { width: 280 }
+      );
+
+    // Digital Signature stamp
+    doc
+      .fontSize(8)
+      .fillColor(palette.primary)
+      .font("Helvetica-Bold")
+      .text("Digitally Signed by:", 340, 722, { width: 215, align: "right" });
+    doc
+      .fontSize(10)
+      .fillColor("#0f172a")
+      .font("Helvetica-Bold")
+      .text(data.doctor.name, 340, 734, { width: 215, align: "right" });
+    doc
+      .fontSize(8)
+      .fillColor("#475569")
+      .font("Helvetica")
+      .text(`BMDC Reg. No: ${data.doctor.bmdcNumber || "Registered"}`, 340, 747, { width: 215, align: "right" });
 
     doc.end();
   });
