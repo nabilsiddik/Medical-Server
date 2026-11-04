@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { PrescriptionControllers } from "./prescription.controllers.js";
-import { checkAuth } from "../../middlewares/checkAuth.js";
+import { checkAuth, optionalAuth } from "../../middlewares/checkAuth.js";
 import { UserRole } from "../../../generated/prisma/enums.js";
 import validateRequest from "../../middlewares/validateRequest.js";
 import {
@@ -31,7 +31,12 @@ prescriptionRouter.post(
   PrescriptionControllers.createDrug,
 );
 
-// Patient: View own prescriptions
+// Patient: View own prescriptions (supports both /my-prescriptions and /patient/my-prescriptions)
+prescriptionRouter.get(
+  "/my-prescriptions",
+  checkAuth(...Object.values(UserRole)),
+  PrescriptionControllers.getMyPrescriptions,
+);
 prescriptionRouter.get(
   "/patient/my-prescriptions",
   checkAuth(...Object.values(UserRole)),
@@ -53,10 +58,10 @@ prescriptionRouter.get(
   PrescriptionControllers.getAllPrescriptions,
 );
 
-// Download Branded Prescription PDF (Doctor Admin & Patient)
+// Download Branded Prescription PDF (Doctor Admin & Patient & Public/Verified)
 prescriptionRouter.get(
   "/:id/pdf",
-  checkAuth(...Object.values(UserRole)),
+  optionalAuth,
   PrescriptionControllers.downloadPrescriptionPdf,
 );
 

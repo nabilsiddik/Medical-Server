@@ -210,6 +210,9 @@ const verifyPrescription = async (token: string) => {
     include: {
       patient: true,
       doctor: true,
+      items: {
+        orderBy: { displayOrder: "asc" },
+      },
     },
   });
 
@@ -231,9 +234,12 @@ const verifyPrescription = async (token: string) => {
 
   return {
     isValid: true,
+    id: prescription.id,
     prescriptionNumber: prescription.prescriptionNumber,
+    createdAt: prescription.createdAt,
     issuedDate: prescription.createdAt.toLocaleDateString("en-GB"),
     doctor: {
+      fullName: prescription.doctor.fullName || settings.doctorName,
       name: prescription.doctor.fullName || settings.doctorName,
       title: settings.doctorTitle,
       bmdcNumber: settings.bmdcNumber,
@@ -243,9 +249,12 @@ const verifyPrescription = async (token: string) => {
       phone: settings.phone,
     },
     patient: {
+      fullName: obfuscate(prescription.patient.fullName),
       initials: obfuscate(prescription.patient.fullName),
       patientId: prescription.patient.patientId,
     },
+    patientId: prescription.patient.patientId,
+    items: prescription.items,
     status: prescription.status,
     message: "Verified authentic medical prescription issued by registered practitioner.",
   };
@@ -302,21 +311,67 @@ const getAllPrescriptions = async (params: any, options: IOptions) => {
 
 // 8. Get Patient Prescriptions
 const getMyPrescriptions = async (userId: string) => {
-  const patient = await prisma.patient.findFirst({
-    where: { userId, isDeleted: false },
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
   });
 
-  if (!patient) {
+  if (!user) {
+    return [];
+  }
+
+  // Find all patient records connected to this user:
+  // 1. By direct userId link
+  // 2. By matching email
+  // 3. By matching phone number (full or last 10 digits)
+  const cleanPhone = user.phoneNumber ? user.phoneNumber.replace(/[^0-9]/g, "") : "";
+  const last10Digits = cleanPhone && cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+  const matchingPatients = await prisma.patient.findMany({
+    where: {
+      isDeleted: false,
+      OR: [
+        { userId: user.id },
+        ...(user.email ? [{ email: { equals: user.email, mode: "insensitive" as const } }] : []),
+        ...(user.phoneNumber ? [{ phone: user.phoneNumber }] : []),
+        ...(last10Digits ? [{ phone: { contains: last10Digits } }] : []),
+      ],
+    },
+    select: { id: true, userId: true },
+  });
+
+  // Automatically link any matching unlinked patient records to this user
+  const unlinkedPatientIds = matchingPatients
+    .filter((p) => !p.userId)
+    .map((p) => p.id);
+
+  if (unlinkedPatientIds.length > 0) {
+    await prisma.patient
+      .updateMany({
+        where: { id: { in: unlinkedPatientIds } },
+        data: { userId: user.id },
+      })
+      .catch(() => {});
+  }
+
+  const patientIds = matchingPatients.map((p) => p.id);
+  if (patientIds.length === 0) {
     return [];
   }
 
   return await prisma.prescription.findMany({
-    where: { patientId: patient.id },
+    where: {
+      patientId: { in: patientIds },
+    },
     orderBy: { createdAt: "desc" },
     include: {
-      items: true,
+      items: {
+        orderBy: { displayOrder: "asc" },
+      },
       doctor: {
         select: { fullName: true, profilePhoto: true, email: true },
+      },
+      patient: {
+        select: { id: true, patientId: true, fullName: true, phone: true, gender: true, ageYears: true },
       },
     },
   });
