@@ -371,7 +371,16 @@ const getMyPrescriptions = async (userId: string) => {
         select: { fullName: true, profilePhoto: true, email: true },
       },
       patient: {
-        select: { id: true, patientId: true, fullName: true, phone: true, gender: true, ageYears: true },
+        select: {
+          id: true,
+          patientId: true,
+          fullName: true,
+          phone: true,
+          email: true,
+          gender: true,
+          age: true,
+          bloodGroup: true,
+        },
       },
     },
   });
