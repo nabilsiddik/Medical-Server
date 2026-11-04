@@ -9,6 +9,7 @@ import { notFound } from "./app/middlewares/notFound.js";
 import globalErrorHandler from "./app/middlewares/globalErrorHandler.js";
 import { isDemoUser } from "./app/utils/demoHelper.js";
 import { verifyToken } from "./app/utils/jwtToken.js";
+import { prisma } from "./lib/prisma.js";
 
 export const app = express();
 
@@ -19,12 +20,22 @@ app.use(
   }),
 );
 
-// 2. Global Rate Limiting
+// 2. Global Rate Limiting (Health and wake-up pings are exempt to support Render stay-awake crons)
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 200, // Limit each IP to 200 requests per window
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    const p = req.path;
+    return (
+      p === "/" ||
+      p === "/health" ||
+      p === "/ping" ||
+      p === "/api/v1/health" ||
+      p === "/api/v1/ping"
+    );
+  },
   message: {
     success: false,
     statusCode: 429,
@@ -109,7 +120,29 @@ app.use((req: Request, res: Response, next) => {
   next();
 });
 
-// 7. Root & Health Check Endpoints
+// 7. Root & Health Check / Wake-Up Endpoints (for Render keep-awake, UptimeRobot, Cron-job.org)
+const healthHandler = async (req: Request, res: Response) => {
+  let dbStatus = "connected";
+  if (req.query.db === "true") {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbStatus = "connected";
+    } catch (err: any) {
+      dbStatus = `disconnected: ${err?.message || "error"}`;
+    }
+  }
+
+  res.status(200).json({
+    status: "healthy",
+    message: "Medical backend server is awake and operational.",
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    environment: envVars.NODE_ENV,
+    ...(req.query.db === "true" ? { database: dbStatus } : {}),
+  });
+};
+
+// Root endpoint
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
@@ -119,13 +152,28 @@ app.get("/", (req: Request, res: Response) => {
   });
 });
 
-app.get("/health", (req: Request, res: Response) => {
-  res.status(200).json({
-    status: "healthy",
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-    environment: envVars.NODE_ENV,
-  });
+// Primary /health and /ping
+app.get("/health", healthHandler);
+app.head("/health", (req: Request, res: Response) => {
+  res.status(200).end();
+});
+app.get("/ping", (req: Request, res: Response) => {
+  res.status(200).send("pong");
+});
+app.head("/ping", (req: Request, res: Response) => {
+  res.status(200).end();
+});
+
+// Namespaced /api/v1/health and /api/v1/ping aliases
+app.get("/api/v1/health", healthHandler);
+app.head("/api/v1/health", (req: Request, res: Response) => {
+  res.status(200).end();
+});
+app.get("/api/v1/ping", (req: Request, res: Response) => {
+  res.status(200).send("pong");
+});
+app.head("/api/v1/ping", (req: Request, res: Response) => {
+  res.status(200).end();
 });
 
 // 8. Application Routes
