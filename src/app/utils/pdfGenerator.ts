@@ -158,22 +158,30 @@ export async function generatePrescriptionPdf(data: PrescriptionPdfData): Promis
 
     data.items.forEach((item, idx) => {
       // Drug line: 1. Tab. Napa Extra (500mg)
+      const formStr = item.form ? `${item.form} ` : "";
+      const strengthStr = item.strength ? ` (${item.strength})` : "";
       doc
         .fontSize(10)
         .fillColor("#0f172a")
         .text(
-          `${idx + 1}.  ${item.form} ${item.name} ${item.strength ? `(${item.strength})` : ""}`,
+          `${idx + 1}.  ${formStr}${item.name}${strengthStr}`,
           195,
           rightY,
         );
       rightY += 14;
 
-      // Dosage & instruction: 1+0+1  --  5 days  --  খাবারের পর
+      // Dosage & instruction: 1+0+1  •  5 days  •  After meal (avoid duplicating when dose === frequency)
+      const dosageParts: string[] = [];
+      if (item.dose) dosageParts.push(item.dose);
+      if (item.frequency && item.frequency !== item.dose) dosageParts.push(item.frequency);
+      if (item.duration) dosageParts.push(item.duration);
+      if (item.instruction) dosageParts.push(item.instruction);
+
       doc
         .fontSize(8)
         .fillColor("#475569")
         .text(
-          `     ${item.dose}  •  ${item.frequency}  •  ${item.duration}  •  ${item.instruction}`,
+          `     ${dosageParts.join("  •  ")}`,
           195,
           rightY,
         );
@@ -183,7 +191,7 @@ export async function generatePrescriptionPdf(data: PrescriptionPdfData): Promis
     // Advice block
     if (data.adviceEnglish || data.adviceBangla) {
       rightY = Math.max(rightY + 15, 520);
-      doc.fontSize(10).fillColor(palette.secondary).text("Advice / নির্দেশনাবলী:", 195, rightY);
+      doc.fontSize(10).fillColor(palette.secondary).text("Advice & Instructions:", 195, rightY);
       rightY += 14;
       if (data.adviceEnglish) {
         doc.fontSize(8).fillColor("#334155").text(data.adviceEnglish, 205, rightY);
