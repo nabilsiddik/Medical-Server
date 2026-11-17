@@ -42,9 +42,23 @@ const globalErrorHandler: ErrorRequestHandler = (err, req, res, next) => {
   else if (err?.name === "PrismaClientKnownRequestError" || err?.code) {
     if (err.code === "P2002") {
       statusCode = StatusCodes.CONFLICT;
-      const target = (err.meta?.target as string[]) || [];
-      message = target.length
-        ? `Duplicate value for field(s): ${target.join(", ")}`
+      const rawTarget = err.meta?.target;
+      let targetNames: string[] = [];
+      if (Array.isArray(rawTarget)) {
+        targetNames = rawTarget.map((t: any) => String(t));
+      } else if (typeof rawTarget === "string") {
+        targetNames = [rawTarget];
+      }
+
+      const readableFields = targetNames.map((f) => {
+        if (f.includes("phoneNumber")) return "Phone Number";
+        if (f.includes("email")) return "Email Address";
+        if (f.includes("bmdc")) return "BMDC Number";
+        return f.replace(/^.*_([a-zA-Z0-9]+)_key$/, "$1");
+      });
+
+      message = readableFields.length
+        ? `A record with this ${readableFields.join(", ")} already exists. Please use a unique value.`
         : "A duplicate record already exists.";
       error = err.meta;
     } else if (err.code === "P2025") {

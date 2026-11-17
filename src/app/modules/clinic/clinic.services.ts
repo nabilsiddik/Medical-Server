@@ -156,6 +156,11 @@ const updateClinicSettings = async (data: any) => {
   }
   delete formattedData.contactPhone;
 
+  if (data.contactEmail !== undefined) {
+    formattedData.email = data.contactEmail;
+  }
+  delete formattedData.contactEmail;
+
   const updated = await prisma.clinicSetting.update({
     where: { id: current.id },
     data: formattedData,
@@ -166,6 +171,7 @@ const updateClinicSettings = async (data: any) => {
     clinicName: updated.brandName,
     bmdcRegNumber: updated.bmdcNumber,
     contactPhone: updated.phone,
+    contactEmail: updated.email,
   };
 };
 

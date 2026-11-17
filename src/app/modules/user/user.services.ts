@@ -345,13 +345,37 @@ const updateMyProfile = async (
     }
   }
 
+  // Normalize and validate phoneNumber
+  let cleanPhone: string | null = user.phoneNumber;
+  if (data.phoneNumber !== undefined) {
+    cleanPhone = data.phoneNumber && data.phoneNumber.trim() !== "" ? data.phoneNumber.trim() : null;
+  }
+
+  if (cleanPhone && cleanPhone !== user.phoneNumber) {
+    const existingWithPhone = await prisma.user.findFirst({
+      where: {
+        phoneNumber: cleanPhone,
+        id: { not: currentUser.id },
+        isDeleted: false,
+      },
+      select: { id: true, email: true },
+    });
+
+    if (existingWithPhone) {
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        `Phone number "${cleanPhone}" is already registered to another account (${existingWithPhone.email}). Please use a different phone number.`,
+      );
+    }
+  }
+
   // Update User and linked Patient (if patient)
   const updatedUser = await prisma.$transaction(async (tx) => {
     const u = await tx.user.update({
       where: { id: currentUser.id },
       data: {
         fullName: data.fullName ?? user.fullName,
-        phoneNumber: data.phoneNumber !== undefined ? data.phoneNumber : user.phoneNumber,
+        phoneNumber: cleanPhone,
         address: data.address !== undefined ? data.address : user.address,
         gender: data.gender !== undefined ? data.gender : user.gender,
         profilePhoto,
@@ -363,7 +387,7 @@ const updateMyProfile = async (
         where: { id: user.patient.id },
         data: {
           fullName: data.fullName ?? user.patient.fullName,
-          phone: data.phoneNumber !== undefined ? (data.phoneNumber || "") : user.patient.phone,
+          phone: cleanPhone || user.patient.phone,
           address: data.address !== undefined ? data.address : user.patient.address,
           gender: data.gender !== undefined ? data.gender : user.patient.gender,
           age: data.age !== undefined ? data.age : user.patient.age,
