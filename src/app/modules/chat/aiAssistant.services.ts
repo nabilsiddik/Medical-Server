@@ -22,12 +22,12 @@ export const generateAiChatResponse = async (
       where: { isActive: true },
     });
 
-    const doctorName = clinic?.doctorName || "Prof. Dr. Sarah Rahman";
-    const doctorSpecialty = clinic?.specialty || "Internal Medicine & Preventive Cardiology";
-    const degrees = clinic?.degrees || "MBBS, FCPS, MD";
+    const doctorName = clinic?.doctorName || "MD. Nabil Siddik";
+    const doctorSpecialty = clinic?.specialty || "Internal Medicine & Cardiovascular Specialist";
+    const degrees = clinic?.degrees || "MBBS, FCPS (Medicine), MD, MACP (USA)";
     const consultationFee = clinic?.consultationFee || 1000;
-    const phone = clinic?.phone || "+880 1700-000000";
-    const emergencyPhone = clinic?.emergencyPhone || "+880 1700-111111";
+    const phone = clinic?.phone || "01957282230";
+    const emergencyPhone = clinic?.emergencyPhone || "12345678";
 
     // Format Chamber Timings & Multiple Breaks
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -135,6 +135,79 @@ Guidelines:
     // Fallback: Intelligent Knowledge-Based Retrieval Engine
     const lower = userMessage.toLowerCase();
     const greeting = patientName ? `Hello ${patientName}` : "Hello";
+
+    // 0. Search Linked Google Sheet Knowledge Base for matching Q&A or custom entries
+    if (Array.isArray(clinic?.knowledgeBaseData) && clinic.knowledgeBaseData.length > 0) {
+      const rows = clinic.knowledgeBaseData as Record<string, any>[];
+      const searchWords = lower
+        .replace(/[^\w\s\u0980-\u09FF]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 2);
+
+      let bestMatchRow: Record<string, any> | null = null;
+      let highestScore = 0;
+
+      for (const row of rows) {
+        let score = 0;
+        const rowValues = Object.values(row).map((v) => String(v || "").toLowerCase());
+        const rowString = rowValues.join(" ");
+
+        // Direct phrase or substring match
+        if (lower.length > 4 && rowString.includes(lower)) {
+          score += 8;
+        }
+
+        // Word overlap
+        for (const word of searchWords) {
+          if (rowString.includes(word)) {
+            score += 2;
+          }
+        }
+
+        // Higher weight if matching question or title
+        for (const [k, v] of Object.entries(row)) {
+          const keyLower = k.toLowerCase();
+          const valLower = String(v || "").toLowerCase();
+          if (
+            keyLower.includes("question") ||
+            keyLower.includes("topic") ||
+            keyLower.includes("service") ||
+            keyLower.includes("faq")
+          ) {
+            for (const word of searchWords) {
+              if (valLower.includes(word)) score += 4;
+            }
+          }
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestMatchRow = row;
+        }
+      }
+
+      // If a strong match is found in the Google Sheet
+      if (bestMatchRow && highestScore >= 4) {
+        const questionKey = Object.keys(bestMatchRow).find((k) =>
+          /question|topic|service|title|faq/i.test(k),
+        );
+        const answerKey = Object.keys(bestMatchRow).find((k) =>
+          /answer|detail|response|notes|desc|price|timing/i.test(k) && k !== questionKey,
+        );
+
+        if (questionKey && answerKey && bestMatchRow[answerKey]) {
+          return `${greeting}!\n\n**${bestMatchRow[questionKey]}**\n${bestMatchRow[answerKey]}`;
+        }
+
+        // Return clean bullet points of the matched row
+        const details = Object.entries(bestMatchRow)
+          .filter(([_, v]) => String(v).trim().length > 0)
+          .map(([k, v]) => `• **${k}**: ${v}`)
+          .join("\n");
+
+        return `${greeting}! Here is the information from our clinic knowledge base:\n\n${details}`;
+      }
+    }
 
     // 1. Fee / Pricing Query
     if (
